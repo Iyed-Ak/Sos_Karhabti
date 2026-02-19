@@ -99,12 +99,25 @@ export class VehiculeController {
   }
 
   @Patch(':id')
+  @UseInterceptors(FileInterceptor("image", {
+      storage:diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          cb(null , `${new Date().getTime()}${extname(file.originalname)}`)}
+      })
+    }))
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateVehiculeDto: UpdateVehiculeDto,
-    @Res() response
+    @Res() response,
+    @UploadedFile() image
   ) {
     try {
+     const newImage = image? image.filename:null;
+      if (newImage) {
+        updateVehiculeDto.image = newImage;
+      }
+
       const updatedVehicule = await this.vehiculeService.update(id, updateVehiculeDto);
       return response.status(HttpStatus.OK).json({
         message: "vehicule updated with success",

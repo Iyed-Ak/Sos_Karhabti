@@ -1,5 +1,7 @@
-import { ChildEntity, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { ChildEntity, Column, CreateDateColumn, OneToMany, UpdateDateColumn } from "typeorm";
 import { User } from "../../user/entities/user.entity";
+import { Vehicule } from "src/vehicule/entities/vehicule.entity";
+import { MissionSOS } from "src/mission-sos/entities/mission-so.entity";
 
 @ChildEntity("client")
 export class Client extends User {
@@ -22,5 +24,14 @@ export class Client extends User {
     @Column({ default: 0 })
     nombreMissionsSOS: number;
 
+    @OneToMany(() => Vehicule, vehicule => vehicule.client, { 
+        cascade: true
+    })
+    vehicules: Vehicule[];
 
+     @OneToMany(() => MissionSOS, (mission) => mission.client, {
+        cascade: false,
+        eager: false
+    })
+    missions: MissionSOS[];
 }

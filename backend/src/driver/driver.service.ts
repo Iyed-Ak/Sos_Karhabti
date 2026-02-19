@@ -6,13 +6,15 @@ import { Driver, DriverStatus } from './entities/driver.entity';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { User } from 'src/user/entities/user.entity';
+import { Camion } from 'src/camion/entities/camion.entity';
 
 @Injectable()
 export class DriversService {
     constructor(
         @InjectRepository(Driver)
         private driverRepository: Repository<Driver>,
-    
+        @InjectRepository(Camion)
+        private camionRepository: Repository<Camion>,
     ) { }
 
     async create(createDriverDto: CreateDriverDto)  {
@@ -86,7 +88,7 @@ export class DriversService {
         if (updateDriverDto.email) driver.email = updateDriverDto.email;
         if (updateDriverDto.phone) driver.phone = updateDriverDto.phone;
         if (updateDriverDto.status) {
-            driver.status = updateDriverDto.status;
+            driver.statusDriver = updateDriverDto.status;
             driver.statusUpdatedAt = new Date();
         }
 
@@ -96,6 +98,40 @@ export class DriversService {
             success: true,
             message: '✅ Chauffeur mis à jour avec succès',
             data: updated,
+        };
+    }
+
+    /**
+     * Récupérer le camion assigné à un chauffeur
+     */
+    async getCamionAssigne(driverId: number) {
+        const driver = await this.driverRepository.findOne({ 
+            where: { id: driverId },
+        });
+
+        if (!driver) {
+            return {
+                success: false,
+                message: `❌ Chauffeur avec l'ID ${driverId} non trouvé`,
+            };
+        }
+
+        // Chercher le camion qui a ce chauffeur assigné
+        const camion = await this.camionRepository.findOne({
+            where: { currentDriverId:{ id: driverId } },
+        });
+
+        if (!camion) {
+            return {
+                success: false,
+                message: '📭 Aucun camion assigné à ce chauffeur',
+            };
+        }
+
+        return {
+            success: true,
+            message: '✅ Camion assigné trouvé',
+            data: camion,
         };
     }
 

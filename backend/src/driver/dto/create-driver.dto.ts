@@ -4,7 +4,7 @@ import { DriverStatus } from '../entities/driver.entity';
 
 export class CreateDriverDto extends CreateUserDto {
     @IsEnum(DriverStatus)
-    status: DriverStatus;
+    statusDriver: DriverStatus;
 
 
     @IsDate()

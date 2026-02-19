@@ -1,5 +1,7 @@
 import { IsString, IsNumber, IsEnum, IsDateString, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
+import { OneToMany } from 'typeorm';
+import { Entretien } from 'src/entretien/entities/entretien.entity';
 
 export enum TypeCarburant {
   ESSENCE = 'essence',
@@ -48,4 +50,10 @@ export class CreateVehiculeDto {
   @IsString()
   @IsOptional()
   image?: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  userId: number;
+
+ 
 }

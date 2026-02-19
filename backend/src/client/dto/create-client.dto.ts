@@ -1,25 +1,33 @@
-import { IsDate, IsEmail, IsNotEmpty, IsNumber, IsString, MinLength } from "class-validator";
+import { IsDate, IsEmail, IsNotEmpty, IsNumber, IsOptional, IsString, MinLength } from "class-validator";
 import { CreateUserDto } from "src/user/dto/create-user.dto";
-import { Column, CreateDateColumn } from "typeorm";
 
 export class CreateClientDto extends CreateUserDto{
     @IsString()
-    @IsNotEmpty()
+      @IsOptional()
+
     status: string;
     @IsDate()
+  @IsOptional()
 
     createdAt: Date;
 
 @IsNumber()   
+  @IsOptional()
 
  totalRequests: number;
 
 @IsDate()
+  @IsOptional()
+
         updatedAt: Date;
 
-@IsNumber()   
+@IsNumber()  
+  @IsOptional()
+
     nombreVehicules: number;
 
-@IsNumber()   
+@IsNumber()  
+  @IsOptional()
+
     nombreMissionsSOS: number;
 }

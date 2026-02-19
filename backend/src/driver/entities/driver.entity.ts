@@ -1,5 +1,7 @@
+import { Camion } from 'src/camion/entities/camion.entity';
+import { MissionSOS } from 'src/mission-sos/entities/mission-so.entity';
 import { User } from 'src/user/entities/user.entity';
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ChildEntity } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ChildEntity, OneToMany, OneToOne, JoinColumn } from 'typeorm';
 
 export enum DriverStatus {
     DISPONIBLE = 'DISPONIBLE',
@@ -10,13 +12,12 @@ export enum DriverStatus {
 @ChildEntity('drivers')
 export class Driver extends User {
 
-
     @Column({
         type: 'enum',
         enum: DriverStatus,
         default: DriverStatus.HORS_SERVICE,
     })
-    status: DriverStatus;
+    statusDriver: DriverStatus;
 
     @Column({ type: 'timestamp', nullable: true })
     statusUpdatedAt: Date;
@@ -26,4 +27,12 @@ export class Driver extends User {
 
     @UpdateDateColumn()
     updatedAt: Date;
+
+    // Relations à ajouter plus tard:
+    @OneToOne(() => Camion, camion => camion.currentDriverId)
+    @JoinColumn({ name: 'camionAssigneId' })
+    camionAssigne: Camion;
+
+    @OneToMany(() => MissionSOS, mission => mission.chauffeur)
+    missions: MissionSOS[];
 }

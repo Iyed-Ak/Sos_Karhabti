@@ -35,6 +35,15 @@ export class DriversController {
     }
 
     /**
+     * GET /drivers/:id/camion
+     * Récupérer le camion assigné au chauffeur
+     */
+    @Get(':id/camion')
+    getCamionAssigne(@Param('id', ParseIntPipe) id: number) {
+        return this.driversService.getCamionAssigne(id);
+    }
+
+    /**
      * PATCH /drivers/:id
      * Modifier un chauffeur
      */

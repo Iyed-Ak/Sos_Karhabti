@@ -6,6 +6,10 @@ import { UserModule } from './user/user.module';
 import { VehiculeModule } from './vehicule/vehicule.module';
 import { DriverModule } from './driver/driver.module';
 import { ClientModule } from './client/client.module';
+import { EntretienModule } from './entretien/entretien.module';
+import { CamionModule } from './camion/camion.module';
+import { MissionSOSModule } from './mission-sos/mission-sos.module';
+
 
 @Module({
   imports: [TypeOrmModule.forRoot({
@@ -17,7 +21,7 @@ import { ClientModule } from './client/client.module';
     database: 'sos_vehicules',
     entities: [__dirname + '/**/*.entity{.ts,.js}'],
     synchronize: true,
-  }), UserModule, VehiculeModule, DriverModule, ClientModule],
+  }), UserModule, VehiculeModule, DriverModule, ClientModule, EntretienModule, CamionModule, MissionSOSModule,],
   controllers: [AppController],
   providers: [AppService],
 })

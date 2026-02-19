@@ -1,4 +1,7 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Client } from "src/client/entities/client.entity";
+import { Entretien } from "src/entretien/entities/entretien.entity";
+import { MissionSOS } from "src/mission-sos/entities/mission-so.entity";
+import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @Entity("vehicule")
 export class Vehicule {
@@ -45,6 +48,23 @@ export class Vehicule {
 
     @Column()
     image:string
+
+    @ManyToOne(() => Client, client => client.vehicules,{
+        onDelete: 'CASCADE',
+    })
+    @JoinColumn({ name: 'userId' })
+    client: Client;
+    
+
+    @OneToMany(() => Entretien, entretien => entretien.vehicule)
+    entretiens: Entretien[];
+
+
+    @OneToMany(() => MissionSOS, (mission) => mission.vehicule, {
+        cascade: false,
+        eager: false
+    })
+    missions: MissionSOS[];
     
 
 
