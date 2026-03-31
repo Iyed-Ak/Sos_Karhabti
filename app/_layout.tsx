@@ -4,13 +4,45 @@ import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Provider } from 'react-redux';
 
-import { AuthProvider, useAuth } from '../src/context/AuthContext';
-import { VehicleProvider } from '../src/context/VehicleContext';
+import { store } from '../redux/store';
+import { useAppDispatch, useAppSelector } from '../redux/hooks';
+import { restoreSessionThunk } from '../redux/reducer/authSlice';
+import { fetchVehicles, clearVehicles } from '../redux/reducer/vehicleSlice';
 import { colors } from '../src/theme/colors';
 
+// ─── Session Initializer ──────────────────────────────────────────────────────
+// Restaure la session au démarrage et charge les véhicules quand l'utilisateur
+// est authentifié (remplace le useEffect qu'on avait dans VehicleProvider).
+
+function SessionInit() {
+  const dispatch = useAppDispatch();
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const isLoading = useAppSelector((state) => state.auth.isLoading);
+
+  // 1. Restaurer la session au lancement
+  useEffect(() => {
+    dispatch(restoreSessionThunk());
+  }, []);
+
+  // 2. Charger/vider les véhicules selon l'état d'authentification
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) {
+      dispatch(fetchVehicles());
+    } else {
+      dispatch(clearVehicles());
+    }
+  }, [isAuthenticated, isLoading]);
+
+  return null; // composant invisible
+}
+
+// ─── Root Navigation Guard ────────────────────────────────────────────────────
+
 function RootLayoutNav() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAppSelector((state) => state.auth);
   const segments = useSegments();
   const router = useRouter();
 
@@ -20,10 +52,8 @@ function RootLayoutNav() {
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!isAuthenticated && !inAuthGroup) {
-      // User is not authenticated but trying to access protected routes
       router.replace('/(auth)/login');
     } else if (isAuthenticated && inAuthGroup) {
-      // User is authenticated but on auth routes
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isLoading, segments]);
@@ -41,16 +71,17 @@ function RootLayoutNav() {
   return <Slot />;
 }
 
+// ─── Root Layout ──────────────────────────────────────────────────────────────
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <VehicleProvider>
-            <StatusBar style="light" />
-            <RootLayoutNav />
-          </VehicleProvider>
-        </AuthProvider>
+        <Provider store={store}>
+          <StatusBar style="light" />
+          <SessionInit />
+          <RootLayoutNav />
+        </Provider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

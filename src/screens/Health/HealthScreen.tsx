@@ -71,7 +71,7 @@ const HealthScreen: React.FC = () => {
           </View>
           <Text style={styles.vehicleName}>{selectedVehicle.brand} {selectedVehicle.model}</Text>
           <Text style={styles.vehicleMeta}>{selectedVehicle.plate} • {selectedVehicle.mileage.toLocaleString()} km</Text>
-          
+
           <View style={[styles.statusBadge, { backgroundColor: STATUS_COLOR[globalStatus] + '20' }]}>
             <Text style={[styles.statusText, { color: STATUS_COLOR[globalStatus] }]}>
               {globalStatus === 'ok' ? 'Système Sain' : globalStatus === 'warn' ? 'Révision Conseillée' : 'Intervention Critique'}
@@ -81,7 +81,7 @@ const HealthScreen: React.FC = () => {
 
         {/* Detailed Systems List */}
         <Text style={styles.sectionTitle}>Analyse par système</Text>
-        
+
         {systems.map(sys => (
           <View key={sys.key} style={styles.sysCard}>
             <View style={styles.sysHeader}>
@@ -94,14 +94,14 @@ const HealthScreen: React.FC = () => {
               </View>
               <Text style={styles.sysPct}>{sys.healthPct}%</Text>
             </View>
-            
+
             {/* Custom progress bar */}
             <View style={styles.progressBarBg}>
               <View style={[styles.progressBarFill, { width: `${sys.healthPct}%`, backgroundColor: STATUS_COLOR[sys.status] }]} />
             </View>
-            
+
             <Text style={styles.sysDesc}>{sys.desc}</Text>
-            
+
             {sys.status !== 'ok' && (
               <TouchableOpacity
                 style={styles.actionBtn}

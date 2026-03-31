@@ -1,78 +1,40 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { vehicleApi } from '../services/api';
-import { useAuth } from './AuthContext';
+// ─── VehicleContext.tsx ───────────────────────────────────────────────────────
+// Ce fichier a été migré de Context API vers Redux Toolkit.
+// Les hooks et types gardent la même interface pour compatibilité.
+// ──────────────────────────────────────────────────────────────────────────────
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { useAppDispatch, useAppSelector } from '../../redux/hooks';
+import {
+  fetchVehicles,
+  addVehicleThunk,
+  updateVehicleThunk,
+  removeVehicleThunk,
+  setSelectedVehicle as setSelectedVehicleAction,
+} from '../../redux/reducer/vehicleSlice';
 
-export interface Vehicle {
-  id: string;
-  brand: string;
-  model: string;
-  year: number;
-  plate: string;
-  vin?: string;
-  mileage: number;
-  fuelType?: 'gasoline' | 'diesel' | 'electric' | 'hybrid';
-  color?: string;
-  image?: string;
-}
+// ─── Types (ré-exportés pour compatibilité) ───────────────────────────────────
 
-interface VehicleContextType {
-  vehicles: Vehicle[];
-  selectedVehicle: Vehicle | null;
-  isLoading: boolean;
-  setSelectedVehicle: (vehicle: Vehicle) => void;
-  addVehicle: (v: Omit<Vehicle, 'id'>) => Promise<void>;
-  updateVehicle: (id: string, updates: Partial<Vehicle>) => Promise<void>;
-  updateMileage: (id: string, km: number) => Promise<void>;
-  removeVehicle: (id: string) => Promise<void>;
-  refreshVehicles: () => Promise<void>;
-}
+export type { Vehicle } from '../../redux/reducer/vehicleSlice';
+import type { Vehicle } from '../../redux/reducer/vehicleSlice';
 
-// ─── Context ──────────────────────────────────────────────────────────────────
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
-const VehicleContext = createContext<VehicleContextType | undefined>(undefined);
+export const useVehicles = () => {
+  const dispatch = useAppDispatch();
+  const { vehicles, selectedVehicle, isLoading } = useAppSelector(
+    (state) => state.vehicles
+  );
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
-export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth();
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      refreshVehicles();
-    } else {
-      setVehicles([]);
-      setSelectedVehicle(null);
-    }
-  }, [isAuthenticated]);
-
-  const refreshVehicles = async () => {
-    setIsLoading(true);
-    try {
-      const data = await vehicleApi.getAll();
-      setVehicles(data);
-      if (data.length > 0 && !selectedVehicle) {
-        setSelectedVehicle(data[0]);
-      }
-    } finally {
-      setIsLoading(false);
-    }
+  const setSelectedVehicle = (vehicle: Vehicle) => {
+    dispatch(setSelectedVehicleAction(vehicle));
   };
 
   const addVehicle = async (vehicleData: Omit<Vehicle, 'id'>) => {
-    const created = await vehicleApi.create(vehicleData);
-    setVehicles(prev => [...prev, created]);
-    if (!selectedVehicle) setSelectedVehicle(created);
+    await dispatch(addVehicleThunk(vehicleData)).unwrap();
   };
 
   const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
-    const updated = await vehicleApi.update(id, updates);
-    setVehicles(prev => prev.map(v => (v.id === id ? updated : v)));
-    if (selectedVehicle?.id === id) setSelectedVehicle(updated);
+    await dispatch(updateVehicleThunk({ id, updates })).unwrap();
   };
 
   const updateMileage = async (id: string, km: number) => {
@@ -80,41 +42,22 @@ export const VehicleProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   const removeVehicle = async (id: string) => {
-    await vehicleApi.delete(id);
-    setVehicles(prev => {
-      const filtered = prev.filter(v => v.id !== id);
-      if (selectedVehicle?.id === id) {
-        setSelectedVehicle(filtered[0] ?? null);
-      }
-      return filtered;
-    });
+    await dispatch(removeVehicleThunk(id)).unwrap();
   };
 
-  return (
-    <VehicleContext.Provider
-      value={{
-        vehicles,
-        selectedVehicle,
-        isLoading,
-        setSelectedVehicle,
-        addVehicle,
-        updateVehicle,
-        updateMileage,
-        removeVehicle,
-        refreshVehicles,
-      }}
-    >
-      {children}
-    </VehicleContext.Provider>
-  );
+  const refreshVehicles = async () => {
+    await dispatch(fetchVehicles()).unwrap();
+  };
+
+  return {
+    vehicles,
+    selectedVehicle,
+    isLoading,
+    setSelectedVehicle,
+    addVehicle,
+    updateVehicle,
+    updateMileage,
+    removeVehicle,
+    refreshVehicles,
+  };
 };
-
-// ─── Hook ─────────────────────────────────────────────────────────────────────
-
-export const useVehicles = (): VehicleContextType => {
-  const context = useContext(VehicleContext);
-  if (!context) throw new Error('useVehicles must be used within VehicleProvider');
-  return context;
-};
-
-export default VehicleContext;
