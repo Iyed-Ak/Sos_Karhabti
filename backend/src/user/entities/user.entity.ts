@@ -7,6 +7,9 @@ export class User extends BaseEntity {
     @PrimaryGeneratedColumn()
     id: number;
 
+    @Column({ nullable: true ,type:"varchar"})
+    refreshToken: string|null;
+
     @Column()
     name: string;
     

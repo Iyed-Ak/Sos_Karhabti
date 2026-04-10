@@ -1,63 +1,77 @@
-import { Driver } from "src/driver/entities/driver.entity";
-import { MissionSOS } from "src/mission-sos/entities/mission-so.entity";
-import { Column, CreateDateColumn, Entity, OneToMany, OneToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  OneToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { Driver } from '../../driver/entities/driver.entity';
+import { MissionSOS } from '../../mission-sos/entities/mission-so.entity';
+import { PlageHoraire } from '../../plage_horaire/entities/plage_horaire.entity';
 
-@Entity("camion")
+@Entity('camion')
 export class Camion {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column({ unique: true })
-    immatriculation: string;
+  @Column({ unique: true })
+  immatriculation: string;
 
-    @Column()
-    marque: string;
+  @Column()
+  marque: string;
 
-    @Column()
-    modele: string;
+  @Column()
+  modele: string;
 
-    @Column()
-    capaciteRemorquage: number;
+  @Column()
+  capaciteRemorquage: number;
 
-    @Column({ type: 'text', nullable: true })
-    planningHoraire: string; // JSON string pour stocker les plages horaires
+  @Column({ default: true })
+  estDisponible: boolean;
 
-    @Column({ default: true })
-    estDisponible: boolean;
+  @Column({ type: 'text', nullable: true })
+  planningHoraire?: string;
 
-    @CreateDateColumn({ type: 'timestamp' })
-    dateCreation: Date;
+  @CreateDateColumn({ type: 'timestamp' })
+  dateCreation: Date;
 
-    @UpdateDateColumn({ type: 'timestamp' })
-    dateModification: Date;
+  @UpdateDateColumn({ type: 'timestamp' })
+  dateModification: Date;
 
-    @Column({ nullable: true })
-    image: string;
+  @Column({ nullable: true })
+  image: string;
 
-    @Column({ default: 0 })
-    kilometrageActuel: number;
+  @Column({ default: 0 })
+  kilometrageActuel: number;
 
-    @Column({ nullable: true })
-    annee: number;
+  @Column({ nullable: true })
+  annee: number;
 
-    @Column({ nullable: true })
-    couleur: string;
+  @Column({ nullable: true })
+  couleur: string;
 
-    
+  // ─── RELATIONS ─────────────────────────────────────────────
 
-    @OneToOne(() => Driver, driver => driver.camionAssigne)
-    currentDriverId: Driver;
+  // Un camion est conduit par un seul chauffeur (côté inverse)
+  @OneToOne(() => Driver, (driver) => driver.camionAssigne, {
+    nullable: true,
+    eager: false,
+  })
+  chauffeur: Driver;
 
-    
-    // @ManyToOne(() => Admin, admin => admin.camions)
-    // admin: Admin;
+  // Un camion peut réaliser plusieurs missions
+  @OneToMany(() => MissionSOS, (mission) => mission.camion, {
+    cascade: false,
+    eager: false,
+  })
+  missions: MissionSOS[];
 
-    // @ManyToOne(() => Driver, driver => driver.camionAssigne)
-    // currentDriver: Driver;
-
-    @OneToMany(() => MissionSOS, mission => mission.camion)
-    missions: MissionSOS[];
-
-    // @OneToMany(() => PlageHoraire, plage => plage.camion)
-    // plagesHoraires: PlageHoraire[];
+  // Un camion a un planning horaire (plusieurs plages)
+  @OneToMany(() => PlageHoraire, (plage) => plage.camion, {
+    cascade: true,
+    eager: false,
+  })
+  plagesHoraires: PlageHoraire[];
 }

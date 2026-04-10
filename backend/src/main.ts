@@ -13,6 +13,12 @@ async function bootstrap() {
       transform: true,            // transforme automatiquement les types (string → number/date)
     }),
   );
- await app.listen(process.env.PORT ?? 3000);;
+app.enableCors({
+    origin: '*',
+    methods: 'GET,PUT,PATCH,POST,DELETE',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
+    credentials: true,
+  });
+  await app.listen(process.env.PORT ?? 3001);
 }
 bootstrap();

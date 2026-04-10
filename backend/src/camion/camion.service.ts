@@ -232,7 +232,7 @@ export class CamionService {
       };
     }
 
-    camion.planningHoraire = planningHoraire;
+    camion.planningHoraire = planningHoraire; // À adapter selon la structure de votre entité et DTO
     const updated = await this.camionRepository.save(camion);
 
     return {

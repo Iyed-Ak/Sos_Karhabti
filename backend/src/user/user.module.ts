@@ -10,5 +10,6 @@ import { Client } from 'src/client/entities/client.entity';
   imports: [TypeOrmModule.forFeature([User,Driver,Client])],
   controllers: [UserController],
   providers: [UserService],
+  exports: [UserService],
 })
 export class UserModule {}

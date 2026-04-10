@@ -6,10 +6,4 @@ export class CreateDriverDto extends CreateUserDto {
     @IsEnum(DriverStatus)
     statusDriver: DriverStatus;
 
-
-    @IsDate()
-    createdAt: Date;
-
-    @IsDate()
-    updatedAt: Date;
 }

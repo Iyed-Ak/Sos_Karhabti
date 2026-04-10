@@ -1,56 +1,92 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { MissionSOS, StatutMission, TypePanne } from './entities/mission-so.entity';
+import { Client } from '../client/entities/client.entity';
+import { Vehicule } from '../vehicule/entities/vehicule.entity';
+import { Camion } from '../camion/entities/camion.entity';
+import { Driver, DriverStatus } from '../driver/entities/driver.entity';
 import { CreateMissionSOSDto } from './dto/create-mission-so.dto';
-import {  UpdateMissionSoDto } from './dto/update-mission-so.dto';
+import { UpdateMissionSoDto } from './dto/update-mission-so.dto';
 import { AffecterMissionDto } from './dto/affecter-mission.dto';
+
+// Relations à charger par défaut pour toutes les requêtes
+const RELATIONS_BASE = ['client', 'vehicule', 'camion', 'chauffeur'];
 
 @Injectable()
 export class MissionSOSService {
   constructor(
     @InjectRepository(MissionSOS)
     private missionRepository: Repository<MissionSOS>,
+
+    @InjectRepository(Client)
+    private clientRepository: Repository<Client>,
+
+    @InjectRepository(Vehicule)
+    private vehiculeRepository: Repository<Vehicule>,
+
+    @InjectRepository(Camion)
+    private camionRepository: Repository<Camion>,
+
+    @InjectRepository(Driver)
+    private driverRepository: Repository<Driver>,
   ) {}
 
-  /**
-   * Créer une nouvelle demande SOS
-   * Le client est connecté, donc on récupère automatiquement son nom et téléphone
-   */
-  async create(createMissionSOSDto: CreateMissionSOSDto, clientData: { nom: string; telephone: string }): Promise<any> {
-    // Vérifier qu'au moins GPS ou adresse manuelle est fourni
-    if (!createMissionSOSDto.latitudeGPS && !createMissionSOSDto.longitudeGPS && !createMissionSOSDto.adresseManuelle) {
+  async create(
+    createMissionSOSDto: CreateMissionSOSDto,
+    clientId: number,
+    vehiculeId?: number,
+  ): Promise<any> {
+    if (
+      !createMissionSOSDto.latitudeGPS &&
+      !createMissionSOSDto.longitudeGPS &&
+      !createMissionSOSDto.adresseManuelle
+    ) {
       return {
         success: false,
-        message: '❌ Veuillez partager votre localisation GPS ou écrire votre adresse',
+        message:
+          '❌ Veuillez partager votre localisation GPS ou écrire votre adresse',
       };
     }
 
-    // Créer la mission avec statut EN_ATTENTE par défaut
+    // Récupérer le client
+    const client = await this.clientRepository.findOne({ where: { id: clientId } });
+    if (!client) {
+      return { success: false, message: `❌ Client ${clientId} non trouvé` };
+    }
+
+    // Récupérer le véhicule si fourni
+    let vehicule: Vehicule | null = null;
+    if (vehiculeId) {
+      vehicule = await this.vehiculeRepository.findOne({ where: { id: vehiculeId } });
+    }
+
     const mission = this.missionRepository.create({
       ...createMissionSOSDto,
-      nomClient: clientData.nom,
-      telephoneClient: clientData.telephone,
+      client,
+      vehicule: vehicule || undefined,
       statut: StatutMission.EN_ATTENTE,
     });
 
     const saved = await this.missionRepository.save(mission);
-    
+
+    // Mettre à jour le compteur de missions du client
+    client.nombreMissionsSOS = (client.nombreMissionsSOS || 0) + 1;
+    client.totalRequests = (client.totalRequests || 0) + 1;
+    await this.clientRepository.save(client);
+
     return {
       success: true,
-      message: '✅ Demande SOS envoyée avec succès ! Nous recherchons le camion le plus proche...',
+      message:
+        '✅ Demande SOS envoyée ! Nous recherchons le camion le plus proche...',
       data: saved,
     };
   }
 
-  /**
-   * Récupérer toutes les missions
-   */
   async findAll(): Promise<any> {
     const missions = await this.missionRepository.find({
       order: { dateCreation: 'DESC' },
-      // Relations à ajouter plus tard:
-      // relations: ['client', 'vehicule', 'camion', 'chauffeur'],
+      relations: RELATIONS_BASE,
     });
 
     return {
@@ -61,37 +97,24 @@ export class MissionSOSService {
     };
   }
 
-  /**
-   * Récupérer une mission par son ID
-   */
   async findOne(id: string): Promise<any> {
     const mission = await this.missionRepository.findOne({
       where: { id },
-      // Relations à ajouter plus tard:
-      // relations: ['client', 'vehicule', 'camion', 'chauffeur'],
+      relations: RELATIONS_BASE,
     });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
-    return {
-      success: true,
-      message: '✅ Mission trouvée',
-      data: mission,
-    };
+    return { success: true, message: '✅ Mission trouvée', data: mission };
   }
 
-  /**
-   * Récupérer les missions par statut
-   */
   async findByStatut(statut: StatutMission): Promise<any> {
     const missions = await this.missionRepository.find({
       where: { statut },
       order: { dateCreation: 'DESC' },
+      relations: RELATIONS_BASE,
     });
 
     return {
@@ -102,241 +125,217 @@ export class MissionSOSService {
     };
   }
 
-  /**
-   * Récupérer les missions en attente
-   */
   async findEnAttente(): Promise<any> {
     return this.findByStatut(StatutMission.EN_ATTENTE);
   }
 
-  /**
-   * Récupérer les missions en cours
-   */
   async findEnCours(): Promise<any> {
     return this.findByStatut(StatutMission.EN_COURS);
   }
 
-  /**
-   * Récupérer les missions terminées
-   */
   async findTerminees(): Promise<any> {
     return this.findByStatut(StatutMission.TERMINEE);
   }
 
-  /**
-   * Récupérer les missions d'un client
-   * À implémenter quand la relation Client sera ajoutée
-   */
+  // ─── IMPLÉMENTÉ : missions d'un client ──────────────────────
   async findByClient(clientId: number): Promise<any> {
-    // TODO: Implémenter quand la relation Client sera ajoutée
-    // const missions = await this.missionRepository.find({
-    //   where: { clientId },
-    //   order: { dateCreation: 'DESC' },
-    //   relations: ['camion', 'chauffeur', 'vehicule'],
-    // });
+    const missions = await this.missionRepository.find({
+      where: { client: { id: clientId } },
+      order: { dateCreation: 'DESC' },
+      relations: ['client', 'vehicule', 'camion', 'chauffeur'],
+    });
 
     return {
-      success: false,
-      message: '⚠️ Méthode findByClient() à implémenter avec la relation Client',
+      success: true,
+      message: `📋 ${missions.length} mission(s) pour le client #${clientId}`,
+      count: missions.length,
+      data: missions,
     };
   }
 
-  /**
-   * Récupérer les missions d'un chauffeur (toutes)
-   * Le chauffeur voit toutes ses missions affectées
-   */
+  // ─── IMPLÉMENTÉ : missions d'un chauffeur ───────────────────
   async findByChauffeur(chauffeurId: number): Promise<any> {
-    // TODO: Implémenter quand la relation Chauffeur sera ajoutée
-    // const missions = await this.missionRepository.find({
-    //   where: { chauffeurId },
-    //   order: { dateCreation: 'DESC' },
-    //   relations: ['client', 'vehicule', 'camion'],
-    // });
+    const missions = await this.missionRepository.find({
+      where: { chauffeur: { id: chauffeurId } },
+      order: { dateCreation: 'DESC' },
+      relations: ['client', 'vehicule', 'camion', 'chauffeur'],
+    });
 
     return {
-      success: false,
-      message: '⚠️ Méthode findByChauffeur() à implémenter avec la relation Chauffeur',
-      // Exemple de ce qui sera retourné:
-      // data: missions (avec toutes les infos: nom client, téléphone, adresse, type panne, description, etc.)
+      success: true,
+      message: `📋 ${missions.length} mission(s) pour le chauffeur #${chauffeurId}`,
+      count: missions.length,
+      data: missions,
     };
   }
 
-  /**
-   * Récupérer les missions actives d'un chauffeur (EN_COURS uniquement)
-   * Le chauffeur voit sa mission en cours avec toutes les informations
-   */
+  // ─── IMPLÉMENTÉ : mission active du chauffeur ───────────────
   async findMissionActiveChauffeur(chauffeurId: number): Promise<any> {
-    // TODO: Implémenter quand la relation Chauffeur sera ajoutée
-    // const mission = await this.missionRepository.findOne({
-    //   where: { 
-    //     chauffeurId,
-    //     statut: StatutMission.EN_COURS 
-    //   },
-    //   relations: ['client', 'vehicule', 'camion'],
-    // });
-
-    // if (!mission) {
-    //   return {
-    //     success: false,
-    //     message: '📭 Aucune mission active',
-    //   };
-    // }
-
-    // return {
-    //   success: true,
-    //   message: '✅ Mission active trouvée',
-    //   data: {
-    //     id: mission.id,
-    //     nomClient: mission.nomClient,
-    //     telephoneClient: mission.telephoneClient,
-    //     adresse: mission.adresseManuelle || `GPS: ${mission.latitudeGPS}, ${mission.longitudeGPS}`,
-    //     latitudeGPS: mission.latitudeGPS,
-    //     longitudeGPS: mission.longitudeGPS,
-    //     typePanne: mission.typePanne,
-    //     descriptionPanne: mission.descriptionPanne,
-    //     tempsEstimeArriveeMinutes: mission.tempsEstimeArriveeMinutes,
-    //     distanceKm: mission.distanceKm,
-    //     dateCreation: mission.dateCreation,
-    //     dateDebutIntervention: mission.dateDebutIntervention,
-    //     vehicule: mission.vehicule, // Infos du véhicule du client
-    //   },
-    // };
-
-    return {
-      success: false,
-      message: '⚠️ Méthode findMissionActiveChauffeur() à implémenter avec la relation Chauffeur',
-    };
-  }
-
-  /**
-   * Récupérer l'historique des missions d'un chauffeur (TERMINEE + ANNULEE)
-   */
-  async findHistoriqueChauffeur(chauffeurId: number): Promise<any> {
-    // TODO: Implémenter quand la relation Chauffeur sera ajoutée
-    // const missions = await this.missionRepository.find({
-    //   where: { 
-    //     chauffeurId,
-    //     statut: In([StatutMission.TERMINEE, StatutMission.ANNULEE])
-    //   },
-    //   order: { dateFinIntervention: 'DESC' },
-    //   relations: ['client', 'vehicule'],
-    // });
-
-    return {
-      success: false,
-      message: '⚠️ Méthode findHistoriqueChauffeur() à implémenter avec la relation Chauffeur',
-    };
-  }
-
-  /**
-   * Affecter automatiquement le camion le plus proche disponible
-   * Cette méthode sera implémentée quand l'entité Camion et la géolocalisation seront disponibles
-   */
-  async affecterCamionAutomatique(missionId: string): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id: missionId } });
+    const mission = await this.missionRepository.findOne({
+      where: {
+        chauffeur: { id: chauffeurId },
+        statut: StatutMission.EN_COURS,
+      },
+      relations: ['client', 'vehicule', 'camion', 'chauffeur'],
+    });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${missionId} non trouvée`,
-      };
+      return { success: false, message: '📭 Aucune mission active' };
     }
 
-    // TODO: Implémenter la logique pour trouver le camion le plus proche
-    // 1. Récupérer tous les camions disponibles
-    // 2. Calculer la distance entre chaque camion et la position du client
-    // 3. Sélectionner le camion le plus proche
-    // 4. Calculer le temps estimé d'arrivée
-    // 5. Affecter le camion et son chauffeur à la mission
-    // 6. Changer le statut de la mission à EN_COURS
-    // 7. Mettre à jour la disponibilité du camion
-
-    // Exemple de logique (à compléter):
-    // const camions = await camionRepository.find({ where: { estDisponible: true } });
-    // const camionPlusProche = calculerCamionPlusProche(mission.latitudeGPS, mission.longitudeGPS, camions);
-    // mission.camionId = camionPlusProche.id;
-    // mission.chauffeurId = camionPlusProche.chauffeurId;
-    // mission.statut = StatutMission.EN_COURS;
-    // mission.affectationAutomatique = true;
-    // mission.tempsEstimeArriveeMinutes = calculerTempsEstime(distance);
-    // mission.distanceKm = distance;
-    // mission.dateDebutIntervention = new Date();
-
     return {
-      success: false,
-      message: '⚠️ Méthode affecterCamionAutomatique() à implémenter avec les entités Camion et Driver',
+      success: true,
+      message: '✅ Mission active trouvée',
+      data: {
+        id: mission.id,
+        client: {
+          nom: mission.client?.name,
+          telephone: mission.client?.phone,
+          adresse: mission.client?.address,
+        },
+        localisation:
+          mission.adresseManuelle ||
+          `GPS: ${mission.latitudeGPS}, ${mission.longitudeGPS}`,
+        latitudeGPS: mission.latitudeGPS,
+        longitudeGPS: mission.longitudeGPS,
+        typePanne: mission.typePanne,
+        descriptionPanne: mission.descriptionPanne,
+        vehicule: mission.vehicule,
+        tempsEstimeArriveeMinutes: mission.tempsEstimeArriveeMinutes,
+        distanceKm: mission.distanceKm,
+        dateCreation: mission.dateCreation,
+        dateDebutIntervention: mission.dateDebutIntervention,
+      },
     };
   }
 
-  /**
-   * Affecter manuellement un camion et un chauffeur (par l'admin)
-   */
-  async affecterCamionManuellement(missionId: string, affecterDto: AffecterMissionDto): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id: missionId } });
+  // ─── IMPLÉMENTÉ : historique du chauffeur ───────────────────
+  async findHistoriqueChauffeur(chauffeurId: number): Promise<any> {
+    const missions = await this.missionRepository.find({
+      where: {
+        chauffeur: { id: chauffeurId },
+        statut: In([StatutMission.TERMINEE, StatutMission.ANNULEE]),
+      },
+      order: { dateFinIntervention: 'DESC' },
+      relations: ['client', 'vehicule'],
+    });
+
+    return {
+      success: true,
+      message: `📋 ${missions.length} mission(s) dans l'historique`,
+      count: missions.length,
+      data: missions,
+    };
+  }
+
+  // ─── AFFECTER MANUELLEMENT ──────────────────────────────────
+  async affecterCamionManuellement(
+    missionId: string,
+    affecterDto: AffecterMissionDto,
+  ): Promise<any> {
+    const mission = await this.missionRepository.findOne({
+      where: { id: missionId },
+      relations: RELATIONS_BASE,
+    });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${missionId} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${missionId} non trouvée` };
     }
 
     if (mission.statut !== StatutMission.EN_ATTENTE) {
       return {
         success: false,
-        message: `❌ Cette mission n'est plus en attente (statut actuel: ${mission.statut})`,
+        message: `❌ Mission déjà traitée (statut: ${mission.statut})`,
       };
     }
 
-    // TODO: Vérifier que le camion et le chauffeur existent et sont disponibles
-    // const camion = await camionRepository.findOne({ where: { id: affecterDto.camionId } });
-    // const chauffeur = await chauffeurRepository.findOne({ where: { id: affecterDto.chauffeurId } });
-    // if (!camion || !chauffeur) { return error; }
-    // if (!camion.estDisponible) { return error; }
+    const camion = await this.camionRepository.findOne({
+      where: { id: affecterDto.camionId },
+    });
+    if (!camion || !camion.estDisponible) {
+      return { success: false, message: '❌ Camion non trouvé ou indisponible' };
+    }
 
-    // Affecter le camion et le chauffeur
-    // mission.camionId = affecterDto.camionId;
-    // mission.chauffeurId = affecterDto.chauffeurId;
+    const driver = await this.driverRepository.findOne({
+      where: { id: affecterDto.chauffeurId },
+    });
+    if (!driver) {
+      return { success: false, message: '❌ Chauffeur non trouvé' };
+    }
+
+    // Affecter
+    mission.camion = camion;
+    mission.chauffeur = driver;
     mission.statut = StatutMission.EN_COURS;
     mission.affectationAutomatique = false;
     mission.dateDebutIntervention = new Date();
 
-    // TODO: Calculer le temps estimé et la distance
-    // mission.tempsEstimeArriveeMinutes = calculerTempsEstime(...);
-    // mission.distanceKm = calculerDistance(...);
+    // Rendre le camion indisponible
+    camion.estDisponible = false;
+    await this.camionRepository.save(camion);
+
+    // Changer le statut du chauffeur
+    driver.statusDriver = DriverStatus.EN_INTERVENTION;
+    driver.statusUpdatedAt = new Date();
+    await this.driverRepository.save(driver);
 
     const updated = await this.missionRepository.save(mission);
 
     return {
       success: true,
-      message: '✅ Camion et chauffeur affectés manuellement avec succès !',
+      message: `✅ Mission affectée au camion #${affecterDto.camionId} et chauffeur #${affecterDto.chauffeurId}`,
       data: updated,
     };
   }
 
-  /**
-   * Changer le statut de la mission
-   */
   async changerStatut(id: string, nouveauStatut: StatutMission): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id } });
+    const mission = await this.missionRepository.findOne({
+      where: { id },
+      relations: ['camion', 'chauffeur'],
+    });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
     const ancienStatut = mission.statut;
     mission.statut = nouveauStatut;
 
-    // Mettre à jour les dates selon le statut
-    if (nouveauStatut === StatutMission.EN_COURS && !mission.dateDebutIntervention) {
+    if (
+      nouveauStatut === StatutMission.EN_COURS &&
+      !mission.dateDebutIntervention
+    ) {
       mission.dateDebutIntervention = new Date();
     }
 
     if (nouveauStatut === StatutMission.TERMINEE) {
       mission.dateFinIntervention = new Date();
+
+      // Remettre le camion disponible
+      if (mission.camion) {
+        mission.camion.estDisponible = true;
+        await this.camionRepository.save(mission.camion);
+      }
+
+      // Remettre le chauffeur disponible
+      if (mission.chauffeur) {
+        mission.chauffeur.statusDriver = DriverStatus.DISPONIBLE;
+        mission.chauffeur.statusUpdatedAt = new Date();
+        await this.driverRepository.save(mission.chauffeur);
+      }
+    }
+
+    if (nouveauStatut === StatutMission.ANNULEE) {
+      // Remettre le camion disponible
+      if (mission.camion) {
+        mission.camion.estDisponible = true;
+        await this.camionRepository.save(mission.camion);
+      }
+      if (mission.chauffeur) {
+        mission.chauffeur.statusDriver = DriverStatus.DISPONIBLE;
+        mission.chauffeur.statusUpdatedAt = new Date();
+        await this.driverRepository.save(mission.chauffeur);
+      }
     }
 
     const updated = await this.missionRepository.save(mission);
@@ -348,57 +347,36 @@ export class MissionSOSService {
     };
   }
 
-  /**
-   * Mettre à jour une mission
-   */
-  async update(id: string, updateMissionSOSDto: UpdateMissionSoDto): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id } });
+  async terminerMission(
+    id: string,
+    notesChauffeur?: string,
+    coutIntervention?: number,
+  ): Promise<any> {
+    const mission = await this.missionRepository.findOne({
+      where: { id },
+      relations: ['camion', 'chauffeur'],
+    });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
-    }
-
-    Object.assign(mission, updateMissionSOSDto);
-    const updated = await this.missionRepository.save(mission);
-
-    return {
-      success: true,
-      message: '✅ Mission mise à jour avec succès !',
-      data: updated,
-    };
-  }
-
-  /**
-   * Terminer une mission avec notes du chauffeur
-   */
-  async terminerMission(id: string, notesChauffeur?: string, coutIntervention?: number): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id } });
-
-    if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
     mission.statut = StatutMission.TERMINEE;
     mission.dateFinIntervention = new Date();
-    
-    if (notesChauffeur) {
-      mission.notesChauffeur = notesChauffeur;
-    }
-    
-    if (coutIntervention !== undefined) {
-      mission.coutIntervention = coutIntervention;
+    if (notesChauffeur) mission.notesChauffeur = notesChauffeur;
+    if (coutIntervention !== undefined) mission.coutIntervention = coutIntervention;
+
+    // Libérer camion et chauffeur
+    if (mission.camion) {
+      mission.camion.estDisponible = true;
+      await this.camionRepository.save(mission.camion);
     }
 
-    // TODO: Remettre le camion comme disponible
-    // if (mission.camionId) {
-    //   await camionRepository.update(mission.camionId, { estDisponible: true });
-    // }
+    if (mission.chauffeur) {
+      mission.chauffeur.statusDriver = DriverStatus.DISPONIBLE;
+      mission.chauffeur.statusUpdatedAt = new Date();
+      await this.driverRepository.save(mission.chauffeur);
+    }
 
     const updated = await this.missionRepository.save(mission);
 
@@ -409,31 +387,26 @@ export class MissionSOSService {
     };
   }
 
-  /**
-   * Evaluer une mission (note du client)
-   */
-  async evaluerMission(id: string, evaluation: number, commentaire?: string): Promise<any> {
+  async evaluerMission(
+    id: string,
+    evaluation: number,
+    commentaire?: string,
+  ): Promise<any> {
     const mission = await this.missionRepository.findOne({ where: { id } });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
     if (mission.statut !== StatutMission.TERMINEE) {
       return {
         success: false,
-        message: '❌ Vous pouvez seulement évaluer une mission terminée',
+        message: '❌ Vous ne pouvez évaluer qu\'une mission terminée',
       };
     }
 
     mission.evaluation = evaluation;
-    
-    if (commentaire) {
-      mission.commentaireClient = commentaire;
-    }
+    if (commentaire) mission.commentaireClient = commentaire;
 
     const updated = await this.missionRepository.save(mission);
 
@@ -444,84 +417,99 @@ export class MissionSOSService {
     };
   }
 
-  /**
-   * Annuler une mission
-   */
   async annulerMission(id: string): Promise<any> {
-    const mission = await this.missionRepository.findOne({ where: { id } });
+    const mission = await this.missionRepository.findOne({
+      where: { id },
+      relations: ['camion', 'chauffeur'],
+    });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
     if (mission.statut === StatutMission.TERMINEE) {
       return {
         success: false,
-        message: '❌ Impossible d\'annuler une mission déjà terminée',
+        message: '❌ Impossible d\'annuler une mission terminée',
       };
     }
 
     mission.statut = StatutMission.ANNULEE;
 
-    // TODO: Remettre le camion comme disponible si un camion était affecté
-    // if (mission.camionId) {
-    //   await camionRepository.update(mission.camionId, { estDisponible: true });
-    // }
+    // Libérer camion et chauffeur si déjà affectés
+    if (mission.camion) {
+      mission.camion.estDisponible = true;
+      await this.camionRepository.save(mission.camion);
+    }
+
+    if (mission.chauffeur) {
+      mission.chauffeur.statusDriver = DriverStatus.DISPONIBLE;
+      mission.chauffeur.statusUpdatedAt = new Date();
+      await this.driverRepository.save(mission.chauffeur);
+    }
 
     const updated = await this.missionRepository.save(mission);
 
-    return {
-      success: true,
-      message: '✅ Mission annulée',
-      data: updated,
-    };
+    return { success: true, message: '✅ Mission annulée', data: updated };
   }
 
-  /**
-   * Supprimer une mission
-   */
+  async update(id: string, updateDto: UpdateMissionSoDto): Promise<any> {
+    const mission = await this.missionRepository.findOne({ where: { id } });
+
+    if (!mission) {
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
+    }
+
+    Object.assign(mission, updateDto);
+    const updated = await this.missionRepository.save(mission);
+
+    return { success: true, message: '✅ Mission mise à jour !', data: updated };
+  }
+
   async remove(id: string): Promise<any> {
     const mission = await this.missionRepository.findOne({ where: { id } });
 
     if (!mission) {
-      return {
-        success: false,
-        message: `❌ Mission avec l'ID ${id} non trouvée`,
-      };
+      return { success: false, message: `❌ Mission ${id} non trouvée` };
     }
 
     await this.missionRepository.remove(mission);
 
-    return {
-      success: true,
-      message: '✅ Mission supprimée avec succès !',
-      deletedId: id,
-    };
+    return { success: true, message: '✅ Mission supprimée !', deletedId: id };
   }
 
-  /**
-   * Obtenir les statistiques des missions
-   */
   async getStatistiques(): Promise<any> {
     const total = await this.missionRepository.count();
-    const enAttente = await this.missionRepository.count({ where: { statut: StatutMission.EN_ATTENTE } });
-    const enCours = await this.missionRepository.count({ where: { statut: StatutMission.EN_COURS } });
-    const terminees = await this.missionRepository.count({ where: { statut: StatutMission.TERMINEE } });
-    const annulees = await this.missionRepository.count({ where: { statut: StatutMission.ANNULEE } });
+    const enAttente = await this.missionRepository.count({
+      where: { statut: StatutMission.EN_ATTENTE },
+    });
+    const enCours = await this.missionRepository.count({
+      where: { statut: StatutMission.EN_COURS },
+    });
+    const terminees = await this.missionRepository.count({
+      where: { statut: StatutMission.TERMINEE },
+    });
+    const annulees = await this.missionRepository.count({
+      where: { statut: StatutMission.ANNULEE },
+    });
 
-    // Calculer le coût total et l'évaluation moyenne
     const missionsTerminees = await this.missionRepository.find({
       where: { statut: StatutMission.TERMINEE },
     });
 
-    const coutTotal = missionsTerminees.reduce((sum, m) => sum + (Number(m.coutIntervention) || 0), 0);
-    const evaluations = missionsTerminees.filter(m => m.evaluation).map(m => m.evaluation);
-    const evaluationMoyenne = evaluations.length > 0
-      ? (evaluations.reduce((sum, e) => sum + e, 0) / evaluations.length).toFixed(2)
-      : 'N/A';
+    const coutTotal = missionsTerminees.reduce(
+      (sum, m) => sum + (Number(m.coutIntervention) || 0),
+      0,
+    );
+
+    const evaluations = missionsTerminees
+      .filter((m) => m.evaluation)
+      .map((m) => m.evaluation);
+
+    const evaluationMoyenne =
+      evaluations.length > 0
+        ? (evaluations.reduce((s, e) => s + e, 0) / evaluations.length).toFixed(2)
+        : 'N/A';
 
     return {
       success: true,
@@ -534,7 +522,10 @@ export class MissionSOSService {
         annulees,
         coutTotal: coutTotal.toFixed(2),
         evaluationMoyenne,
-        tauxReussite: total > 0 ? ((terminees / total) * 100).toFixed(2) + '%' : '0%',
+        tauxReussite:
+          total > 0
+            ? ((terminees / total) * 100).toFixed(2) + '%'
+            : '0%',
       },
     };
   }

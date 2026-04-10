@@ -1,96 +1,139 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, ParseIntPipe } from '@nestjs/common';
-import { CreateDriverDto } from './dto/create-driver.dto';
-import { UpdateDriverDto, UpdateDriverStatusDto } from './dto/update-driver.dto';
+import {
+  Controller,Get,Post,Body,Patch,Param,Delete,ParseIntPipe,Res,HttpStatus,} from '@nestjs/common';
 import { DriversService } from './driver.service';
+import { CreateDriverDto } from './dto/create-driver.dto';
+import { UpdateDriverDto } from './dto/update-driver.dto';
 
 @Controller('drivers')
 export class DriversController {
-    constructor(private readonly driversService: DriversService) { }
+  constructor(private readonly driversService: DriversService) {}
 
-    /**
-     * POST /drivers
-     * Créer un nouveau chauffeur
-     */
-    @Post()
-    create(@Body() createDriverDto: CreateDriverDto) {
-        return this.driversService.create(createDriverDto);
+  
+
+
+  // ─── ROUTES SANS PARAMÈTRE ────────────────────────────────────
+
+  @Post()
+  async create(@Body() createDriverDto: CreateDriverDto, @Res() response) {
+    try {
+      const result = await this.driversService.create(createDriverDto);
+      return response.status(HttpStatus.CREATED).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * GET /drivers
-     * Liste de tous les chauffeurs
-     */
-    @Get()
-    findAll() {
-        return this.driversService.findAll();
+  @Get()
+  async findAll(@Res() response) {
+    try {
+      const result = await this.driversService.findAll();
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * GET /drivers/:id
-     * Détails d'un chauffeur
-     */
-    @Get(':id')
-    findOne(@Param('id', ParseIntPipe) id: number) {
-        return this.driversService.findOne(id);
+  // ─── ROUTES :id/sous-chemin EN PREMIER ─────────────────────
+  // IMPORTANT : toujours avant les routes :id seul
+
+  @Post(':id/assigner-camion')
+  async assignerCamion(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('camionId') camionId: number,
+    @Res() response,
+  ) {
+    try {
+      const result = await this.driversService.assignerCamion(id, camionId);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * GET /drivers/:id/camion
-     * Récupérer le camion assigné au chauffeur
-     */
-    @Get(':id/camion')
-    getCamionAssigne(@Param('id', ParseIntPipe) id: number) {
-        return this.driversService.getCamionAssigne(id);
+  @Get(':id/camion')
+  async getCamionAssigne(
+    @Param('id', ParseIntPipe) id: number,
+    @Res() response,
+  ) {
+    try {
+      const result = await this.driversService.getCamionAssigne(id);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * PATCH /drivers/:id
-     * Modifier un chauffeur
-     */
-    @Patch(':id')
-    update(
-        @Param('id', ParseIntPipe) id: number,
-        @Body() updateDriverDto: UpdateDriverDto,
-    ) {
-        return this.driversService.update(id, updateDriverDto);
+  @Get(':id/missions')
+  async getMissions(@Param('id', ParseIntPipe) id: number, @Res() response) {
+    try {
+      const result = await this.driversService.getMissions(id);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * DELETE /drivers/:id
-     * Supprimer un chauffeur
-     */
-    @Delete(':id')
-    remove(@Param('id', ParseIntPipe) id: number) {
-        return this.driversService.remove(id);
+  @Delete(':id/retirer-camion')
+  async retirerCamion(@Param('id', ParseIntPipe) id: number, @Res() response) {
+    try {
+      const result = await this.driversService.retirerCamion(id);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
     }
+  }
 
-    /**
-     * POST /drivers/:id/renew-token
-     * Renouveler le token sécurisé
-     */
-    // @Post(':id/renew-token')
-    // renewToken(@Param('id', ParseIntPipe) id: number) {
-    //     return this.driversService.renewToken(id);
-    // }
+  // ─── ROUTES :id SEUL EN DERNIER ────────────────────────────
 
-    /**
-     * GET /drivers/status/:token
-     * Voir le statut via le token sécurisé
-     */
-    // @Get('status/:token')
-    // getDriverByToken(@Param('token') token: string) {
-    //     return this.driversService.findByToken(token);
-    // }
+  @Get(':id')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Res() response) {
+    try {
+      const result = await this.driversService.findOne(id);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
+    }
+  }
 
-    /**
-     * POST /drivers/status/:token
-     * Modifier le statut via le token sécurisé
-     */
-    // @Post('status/:token')
-    // updateStatus(
-    //     @Param('token') token: string,
-    //     @Body() updateStatusDto: UpdateDriverStatusDto,
-    // ) {
-    //     return this.driversService.updateStatus(token, updateStatusDto.status);
-    // }
+  @Patch(':id')
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDriverDto: UpdateDriverDto,
+    @Res() response,
+  ) {
+    try {
+      const result = await this.driversService.update(id, updateDriverDto);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
+    }
+  }
+
+  @Delete(':id')
+  async remove(@Param('id', ParseIntPipe) id: number, @Res() response) {
+    try {
+      const result = await this.driversService.remove(id);
+      return response.status(HttpStatus.OK).json(result);
+    } catch (error) {
+      return response
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ statusCode: 400, message: error.message });
+    }
+  }
 }

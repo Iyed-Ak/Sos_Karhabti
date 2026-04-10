@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Vehicule } from './entities/vehicule.entity';
+import { Client } from '../client/entities/client.entity';
 import { CreateVehiculeDto } from './dto/create-vehicule.dto';
 import { UpdateVehiculeDto } from './dto/update-vehicule.dto';
 
@@ -10,17 +11,35 @@ export class VehiculeService {
   constructor(
     @InjectRepository(Vehicule)
     private vehiculeRepository: Repository<Vehicule>,
+
+    @InjectRepository(Client)
+    private clientRepository: Repository<Client>,
   ) {}
 
-  /**
-   * Créer un nouveau véhicule
-   * @param createVehiculeDto - Données du véhicule à créer
-   * @returns Le véhicule créé avec un message de succès
-   */
   async create(createVehiculeDto: CreateVehiculeDto): Promise<any> {
-    const vehicule = this.vehiculeRepository.create(createVehiculeDto);
+    // Vérifier que le client existe
+    const client = await this.clientRepository.findOne({
+      where: { id: createVehiculeDto.userId },
+    });
+
+    if (!client) {
+      return {
+        success: false,
+        message: `❌ Client avec l'ID ${createVehiculeDto.userId} non trouvé`,
+      };
+    }
+
+    const vehicule = this.vehiculeRepository.create({
+      ...createVehiculeDto,
+      client: client,
+    });
+
     const saved = await this.vehiculeRepository.save(vehicule);
-    
+
+    // Mettre à jour le compteur de véhicules du client
+    client.nombreVehicules = (client.nombreVehicules || 0) + 1;
+    await this.clientRepository.save(client);
+
     return {
       success: true,
       message: '✅ Véhicule ajouté avec succès !',
@@ -28,13 +47,10 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Récupérer tous les véhicules
-   * @returns Liste de tous les véhicules
-   */
   async findAll(): Promise<any> {
     const vehicules = await this.vehiculeRepository.find({
       order: { dateCreation: 'DESC' },
+      relations: ['client'],
     });
 
     return {
@@ -45,14 +61,10 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Récupérer un véhicule par son ID
-   * @param id - L'ID du véhicule
-   * @returns Le véhicule trouvé
-   */
   async findOne(id: number): Promise<any> {
     const vehicule = await this.vehiculeRepository.findOne({
       where: { id },
+      relations: ['client', 'entretiens', 'missions'],
     });
 
     if (!vehicule) {
@@ -66,36 +78,31 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Récupérer tous les véhicules d'un utilisateur
-   * @param userId - L'ID de l'utilisateur
-   * @returns Liste des véhicules de l'utilisateur
-   */
   async findByUser(userId: number): Promise<any> {
     const vehicules = await this.vehiculeRepository.find({
+      where: { client: { id: userId } },
       order: { dateCreation: 'DESC' },
+      relations: ['client', 'entretiens'],
     });
 
     return {
       success: true,
-      message: `📋 ${vehicules.length} véhicule(s) trouvé(s) pour l'utilisateur #${userId}`,
+      message: `📋 ${vehicules.length} véhicule(s) pour le client #${userId}`,
       count: vehicules.length,
       data: vehicules,
     };
   }
 
-  /**
-   * Rechercher un véhicule par sa plaque d'immatriculation
-   * @param plaque - La plaque d'immatriculation
-   * @returns Le véhicule trouvé
-   */
   async findByPlaque(plaque: string): Promise<any> {
     const vehicule = await this.vehiculeRepository.findOne({
       where: { plaqueImmatriculation: plaque },
+      relations: ['client', 'entretiens'],
     });
 
     if (!vehicule) {
-      throw new NotFoundException(`❌ Véhicule avec la plaque ${plaque} non trouvé`);
+      throw new NotFoundException(
+        `❌ Véhicule avec la plaque ${plaque} non trouvé`,
+      );
     }
 
     return {
@@ -105,12 +112,6 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Mettre à jour un véhicule
-   * @param id - L'ID du véhicule
-   * @param updateVehiculeDto - Nouvelles données du véhicule
-   * @returns Le véhicule mis à jour
-   */
   async update(id: number, updateVehiculeDto: UpdateVehiculeDto): Promise<any> {
     const vehicule = await this.vehiculeRepository.findOne({ where: { id } });
 
@@ -128,16 +129,23 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Supprimer un véhicule
-   * @param id - L'ID du véhicule à supprimer
-   * @returns Message de confirmation
-   */
   async remove(id: number): Promise<any> {
-    const vehicule = await this.vehiculeRepository.findOne({ where: { id } });
+    const vehicule = await this.vehiculeRepository.findOne({
+      where: { id },
+      relations: ['client'],
+    });
 
     if (!vehicule) {
       throw new NotFoundException(`❌ Véhicule avec l'ID ${id} non trouvé`);
+    }
+
+    // Décrémenter le compteur de véhicules du client
+    if (vehicule.client) {
+      vehicule.client.nombreVehicules = Math.max(
+        0,
+        (vehicule.client.nombreVehicules || 1) - 1,
+      );
+      await this.clientRepository.save(vehicule.client);
     }
 
     await this.vehiculeRepository.remove(vehicule);
@@ -149,12 +157,6 @@ export class VehiculeService {
     };
   }
 
-  /**
-   * Mettre à jour le kilométrage d'un véhicule
-   * @param id - L'ID du véhicule
-   * @param nouveauKm - Nouveau kilométrage
-   * @returns Le véhicule avec le kilométrage mis à jour
-   */
   async updateKilometrage(id: number, nouveauKm: number): Promise<any> {
     const vehicule = await this.vehiculeRepository.findOne({ where: { id } });
 

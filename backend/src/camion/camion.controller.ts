@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Res, HttpStatus, ParseIntPipe, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Res, HttpStatus, ParseIntPipe, UseInterceptors, UploadedFile, UseGuards } from '@nestjs/common';
 import { CamionService } from './camion.service';
 import { CreateCamionDto } from './dto/create-camion.dto';
 import { UpdateCamionDto } from './dto/update-camion.dto';
@@ -6,7 +6,8 @@ import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-
+import { AccessTokenGuard } from 'src/common/guards/accessToken.guards';
+@UseGuards(AccessTokenGuard)
 @Controller('camions')
 export class CamionController {
   constructor(private readonly camionService: CamionService) {}

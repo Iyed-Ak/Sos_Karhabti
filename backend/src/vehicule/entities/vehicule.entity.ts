@@ -1,73 +1,79 @@
-import { Client } from "src/client/entities/client.entity";
-import { Entretien } from "src/entretien/entities/entretien.entity";
-import { MissionSOS } from "src/mission-sos/entities/mission-so.entity";
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from 'typeorm';
+import { Client } from '../../client/entities/client.entity';
+import { Entretien } from '../../entretien/entities/entretien.entity';
+import { MissionSOS } from '../../mission-sos/entities/mission-so.entity';
 
-@Entity("vehicule")
+@Entity('vehicule')
 export class Vehicule {
-    @PrimaryGeneratedColumn()
-    id: number;
+  @PrimaryGeneratedColumn()
+  id: number;
 
-    @Column()
-    marque: string;
+  @Column()
+  marque: string;
 
-    @Column()
-    modele: string;
+  @Column()
+  modele: string;
 
-    @Column()
-    annee: number;
+  @Column()
+  annee: number;
 
-    @Column()
-    kilometrageActuel: number;
+  @Column()
+  kilometrageActuel: number;
 
-    @Column()
-    plaqueImmatriculation: string;
+  @Column({ unique: true })
+  plaqueImmatriculation: string;
 
-    @Column()
-    vin: string;
+  @Column({ nullable: true })
+  vin: string;
 
-    @Column()
-    dateAcquisition: Date;
+  @Column({ nullable: true, type: 'date' })
+  dateAcquisition: Date;
 
-    @Column()
-    typeCarburant: string;
+  @Column()
+  typeCarburant: string;
 
-    @Column()
-    couleur: string;
+  @Column({ nullable: true })
+  couleur: string;
 
-   
+  @Column({ nullable: true })
+  image: string;
 
-    // @Column()
-    // userId: number;
+  @CreateDateColumn({ type: 'timestamp' })
+  dateCreation: Date;
 
-    @CreateDateColumn()
-    dateCreation: Date;
+  @UpdateDateColumn({ type: 'timestamp' })
+  dateModification: Date;
 
-    @UpdateDateColumn()
-    dateModification: Date;
+  // ─── RELATIONS ─────────────────────────────────────────────
 
-    @Column()
-    image:string
+  // Un véhicule appartient à un client
+  @ManyToOne(() => Client, (client) => client.vehicules, {
+    onDelete: 'CASCADE',
+    eager: false,
+  })
+  @JoinColumn({ name: 'clientId' })
+  client: Client;
 
-    @ManyToOne(() => Client, client => client.vehicules,{
-        onDelete: 'CASCADE',
-    })
-    @JoinColumn({ name: 'userId' })
-    client: Client;
-    
+  // Un véhicule peut avoir plusieurs entretiens
+  @OneToMany(() => Entretien, (entretien) => entretien.vehicule, {
+    cascade: true,
+    eager: false,
+  })
+  entretiens: Entretien[];
 
-    @OneToMany(() => Entretien, entretien => entretien.vehicule)
-    entretiens: Entretien[];
-
-
-    @OneToMany(() => MissionSOS, (mission) => mission.vehicule, {
-        cascade: false,
-        eager: false
-    })
-    missions: MissionSOS[];
-    
-
-
-
-
+  // Un véhicule peut être concerné par plusieurs missions SOS
+  @OneToMany(() => MissionSOS, (mission) => mission.vehicule, {
+    cascade: false,
+    eager: false,
+  })
+  missions: MissionSOS[];
 }

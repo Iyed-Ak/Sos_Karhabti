@@ -1,208 +1,229 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
 import { Driver, DriverStatus } from './entities/driver.entity';
+import { Camion } from '../camion/entities/camion.entity';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
-import { User } from 'src/user/entities/user.entity';
-import { Camion } from 'src/camion/entities/camion.entity';
 
 @Injectable()
 export class DriversService {
-    constructor(
-        @InjectRepository(Driver)
-        private driverRepository: Repository<Driver>,
-        @InjectRepository(Camion)
-        private camionRepository: Repository<Camion>,
-    ) { }
+  constructor(
+    @InjectRepository(Driver)
+    private driverRepository: Repository<Driver>,
 
-    async create(createDriverDto: CreateDriverDto)  {
-        
-        // Vérifier si l'utilisateur existe déjà
-        const existingUser = await this.driverRepository.findOne({ where: { email: createDriverDto.email } });
-        if (existingUser) {
-            return {
-                success: false,
-                message: '❌ Un chauffeur avec cet email existe déjà',
-            };
-        }
+    @InjectRepository(Camion)
+    private camionRepository: Repository<Camion>,
+  ) {}
 
+  async create(createDriverDto: CreateDriverDto) {
+    const existing = await this.driverRepository.findOne({
+      where: { email: createDriverDto.email },
+    });
 
-        // Créer l'utilisateur
-        const driver = this.driverRepository.create({...createDriverDto , role: 'drivers'});
-
-        const savedDriver = await this.driverRepository.save(driver);
-
-      
-
-        return savedDriver;
-
-
+    if (existing) {
+      return {
+        success: false,
+        message: '❌ Un chauffeur avec cet email existe déjà',
+      };
     }
 
-    async findAll() {
-        const drivers = await this.driverRepository.find({
-            order: { createdAt: 'DESC' },
-        });
+    const driver = this.driverRepository.create({
+      ...createDriverDto,
+      role: 'drivers',
+    });
 
-        return {
-            success: true,
-            message: `📋 ${drivers.length} chauffeur(s) trouvé(s)`,
-            count: drivers.length,
-            data: drivers,
-        };
+    const saved = await this.driverRepository.save(driver);
+
+    return {
+      success: true,
+      message: '✅ Chauffeur créé avec succès',
+      data: saved,
+    };
+  }
+
+  async findAll() {
+    const drivers = await this.driverRepository.find({
+      order: { createdAt: 'DESC' },
+      relations: ['camionAssigne'],
+    });
+
+    return {
+      success: true,
+      message: `📋 ${drivers.length} chauffeur(s) trouvé(s)`,
+      count: drivers.length,
+      data: drivers,
+    };
+  }
+
+  async findOne(id: number) {
+    const driver = await this.driverRepository.findOne({
+      where: { id },
+      relations: ['camionAssigne', 'missions'],
+    });
+
+    if (!driver) {
+      return {
+        success: false,
+        message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
+      };
     }
 
-    async findOne(id: number) {
-        const driver = await this.driverRepository.findOne({ where: { id } });
+    return {
+      success: true,
+      message: '✅ Chauffeur trouvé',
+      data: driver,
+    };
+  }
 
-        if (!driver) {
-            return {
-                success: false,
-                message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
-            };
-        }
+  async update(id: number, updateDriverDto: UpdateDriverDto) {
+    const driver = await this.driverRepository.findOne({ where: { id } });
 
-        return {
-            success: true,
-            message: '✅ Chauffeur trouvé',
-            data: driver,
-        };
+    if (!driver) {
+      return {
+        success: false,
+        message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
+      };
     }
 
-   
-
-    async update(id: number, updateDriverDto: UpdateDriverDto) {
-        const driver = await this.driverRepository.findOne({ where: { id } });
-
-        if (!driver) {
-            return {
-                success: false,
-                message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
-            };
-        }
-
-        // Mettre à jour les champs
-        if (updateDriverDto.name) driver.name = updateDriverDto.name;
-        if (updateDriverDto.email) driver.email = updateDriverDto.email;
-        if (updateDriverDto.phone) driver.phone = updateDriverDto.phone;
-        if (updateDriverDto.status) {
-            driver.statusDriver = updateDriverDto.status;
-            driver.statusUpdatedAt = new Date();
-        }
-
-        const updated = await this.driverRepository.save(driver);
-
-        return {
-            success: true,
-            message: '✅ Chauffeur mis à jour avec succès',
-            data: updated,
-        };
+    if (updateDriverDto.name) driver.name = updateDriverDto.name;
+    if (updateDriverDto.email) driver.email = updateDriverDto.email;
+    if (updateDriverDto.phone) driver.phone = updateDriverDto.phone;
+    if (updateDriverDto.status) {
+      driver.statusDriver = updateDriverDto.status;
+      driver.statusUpdatedAt = new Date();
     }
 
-    /**
-     * Récupérer le camion assigné à un chauffeur
-     */
-    async getCamionAssigne(driverId: number) {
-        const driver = await this.driverRepository.findOne({ 
-            where: { id: driverId },
-        });
+    const updated = await this.driverRepository.save(driver);
 
-        if (!driver) {
-            return {
-                success: false,
-                message: `❌ Chauffeur avec l'ID ${driverId} non trouvé`,
-            };
-        }
+    return {
+      success: true,
+      message: '✅ Chauffeur mis à jour avec succès',
+      data: updated,
+    };
+  }
 
-        // Chercher le camion qui a ce chauffeur assigné
-        const camion = await this.camionRepository.findOne({
-            where: { currentDriverId:{ id: driverId } },
-        });
+  async remove(id: number) {
+    const driver = await this.driverRepository.findOne({ where: { id } });
 
-        if (!camion) {
-            return {
-                success: false,
-                message: '📭 Aucun camion assigné à ce chauffeur',
-            };
-        }
-
-        return {
-            success: true,
-            message: '✅ Camion assigné trouvé',
-            data: camion,
-        };
+    if (!driver) {
+      return {
+        success: false,
+        message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
+      };
     }
 
-    // async updateStatus(token: string, status: DriverStatus) {
-    //     const result = await this.findByToken(token);
+    await this.driverRepository.remove(driver);
 
-    //     if (!result.success) {
-    //         return result;
-    //     }
+    return {
+      success: true,
+      message: '✅ Chauffeur supprimé avec succès',
+      deletedId: id,
+    };
+  }
 
-    //     const driver = result.data;
-    //     driver.status = status;
-    //     driver.statusUpdatedAt = new Date();
+  // Assigner un camion à un chauffeur
+  async assignerCamion(driverId: number, camionId: number) {
+    const driver = await this.driverRepository.findOne({
+      where: { id: driverId },
+      relations: ['camionAssigne'],
+    });
 
-    //     const updated = await this.driverRepository.save(driver);
-
-    //     return {
-    //         success: true,
-    //         message: `✅ Statut changé en "${status}"`,
-    //         data: {
-    //             name: updated.name,
-    //             status: updated.status,
-    //             statusUpdatedAt: updated.statusUpdatedAt,
-    //         },
-    //     };
-    // }
-
-    async remove(id: number) {
-        const driver = await this.driverRepository.findOne({ where: { id } });
-
-        if (!driver) {
-            return {
-                success: false,
-                message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
-            };
-        }
-
-       
-
-        await this.driverRepository.remove(driver);
-
-        return {
-            success: true,
-            message: '✅ Chauffeur supprimé avec succès',
-            deletedId: id,
-        };
+    if (!driver) {
+      return { success: false, message: `❌ Chauffeur ${driverId} non trouvé` };
     }
 
-    // async renewToken(id: number) {
-    //     const driver = await this.driverRepository.findOne({ where: { id } });
+    const camion = await this.camionRepository.findOne({
+      where: { id: camionId },
+      relations: ['chauffeur'],
+    });
 
-    //     if (!driver) {
-    //         return {
-    //             success: false,
-    //             message: `❌ Chauffeur avec l'ID ${id} non trouvé`,
-    //         };
-    //     }
+    if (!camion) {
+      return { success: false, message: `❌ Camion ${camionId} non trouvé` };
+    }
 
-    //     driver.secureToken = randomBytes(32).toString('hex');
-    //     driver.tokenExpiresAt = new Date();
-    //     driver.tokenExpiresAt.setDate(driver.tokenExpiresAt.getDate() + 30);
+    // Vérifier que le camion n'a pas déjà un chauffeur différent
+    if (camion.chauffeur && camion.chauffeur.id !== driverId) {
+      return {
+        success: false,
+        message: `❌ Ce camion est déjà assigné au chauffeur #${camion.chauffeur.id}`,
+      };
+    }
 
-    //     const updated = await this.driverRepository.save(driver);
+    // Affecter la relation
+    driver.camionAssigne = camion;
+    driver.statusDriver = DriverStatus.DISPONIBLE;
+    const updated = await this.driverRepository.save(driver);
 
-    //     return {
-    //         success: true,
-    //         message: '✅ Token renouvelé',
-    //         data: {
-    //             secureToken: updated.secureToken,
-    //             tokenExpiresAt: updated.tokenExpiresAt,
-    //         },
-    //     };
-    // }
+    return {
+      success: true,
+      message: `✅ Camion #${camionId} assigné au chauffeur #${driverId}`,
+      data: updated,
+    };
+  }
+
+  // Retirer l'assignation d'un camion
+  async retirerCamion(driverId: number) {
+    const driver = await this.driverRepository.findOne({
+      where: { id: driverId },
+      relations: ['camionAssigne'],
+    });
+
+    if (!driver) {
+      return { success: false, message: `❌ Chauffeur ${driverId} non trouvé` };
+    }
+
+    driver.camionAssigne = null;
+    const updated = await this.driverRepository.save(driver);
+
+    return {
+      success: true,
+      message: '✅ Assignation retirée avec succès',
+      data: updated,
+    };
+  }
+
+  // Récupérer le camion assigné à un chauffeur
+  async getCamionAssigne(driverId: number) {
+    const driver = await this.driverRepository.findOne({
+      where: { id: driverId },
+      relations: ['camionAssigne', 'camionAssigne.plagesHoraires'],
+    });
+
+    if (!driver) {
+      return { success: false, message: `❌ Chauffeur ${driverId} non trouvé` };
+    }
+
+    if (!driver.camionAssigne) {
+      return {
+        success: false,
+        message: '📭 Aucun camion assigné à ce chauffeur',
+      };
+    }
+
+    return {
+      success: true,
+      message: '✅ Camion assigné trouvé',
+      data: driver.camionAssigne,
+    };
+  }
+
+  // Récupérer les missions d'un chauffeur
+  async getMissions(driverId: number) {
+    const driver = await this.driverRepository.findOne({
+      where: { id: driverId },
+      relations: ['missions', 'missions.vehicule', 'missions.client', 'missions.camion'],
+    });
+
+    if (!driver) {
+      return { success: false, message: `❌ Chauffeur ${driverId} non trouvé` };
+    }
+
+    return {
+      success: true,
+      message: `📋 ${driver.missions?.length || 0} mission(s) trouvée(s)`,
+      count: driver.missions?.length || 0,
+      data: driver.missions,
+    };
+  }
 }
